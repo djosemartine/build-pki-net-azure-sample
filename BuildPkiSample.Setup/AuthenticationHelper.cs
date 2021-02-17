@@ -11,22 +11,28 @@ namespace BuildPkiSample.Setup
 {
     internal class AuthenticationHelper
     {
-        public static readonly string[] AzureManagementScopes = { "https://management.azure.com/user_impersonation" };
+        public static readonly string[] AzureManagementScopes = { "https://vault.usgovcloudapi.net/user_impersonation" };
 
         private readonly string _clientId;
         private readonly string _tenantId;
+        private readonly string _instance;
         private readonly string[] _scopes;
 
-        public AuthenticationHelper(string clientId, string tenantId, string[] scopes)
+        public AuthenticationHelper(string instance, string tenantId, string clientId, string[] scopes)
         {
             _clientId = clientId;
             _tenantId = tenantId;
             _scopes = scopes;
+            _instance = instance;
         }
 
         public async Task<AcquireTokenResult> AcquireTokenAsync()
         {
-            var app = PublicClientApplicationBuilder.Create(_clientId).WithTenantId(_tenantId).WithDefaultRedirectUri().Build();
+            var app = PublicClientApplicationBuilder.Create(_clientId)
+                .WithTenantId(_tenantId)
+                .WithAuthority($"{_instance}/{_tenantId}")
+                .WithDefaultRedirectUri()
+                .Build();
 
             var storageCreationProperties = new StorageCreationPropertiesBuilder("tokenCache.dat", ".", _clientId).Build();
             (await MsalCacheHelper.CreateAsync(storageCreationProperties)).RegisterCache(app.UserTokenCache);
@@ -38,14 +44,10 @@ namespace BuildPkiSample.Setup
             }
             catch (MsalUiRequiredException)
             {
-                authenticationResult = await app.AcquireTokenWithDeviceCode(_scopes, deviceCodeResult =>
-                {
-                    Console.WriteLine(deviceCodeResult.Message);
-                    return deviceCodeResult.VerificationUrl == null ? Task.CompletedTask : OpenBrowserAsync(deviceCodeResult.VerificationUrl);
-                }).ExecuteAsync();
+                authenticationResult = await app.AcquireTokenInteractive(_scopes).ExecuteAsync();
             }
 
-            return new AcquireTokenResult(authenticationResult.AccessToken, ExtractObjectId(authenticationResult.IdToken));
+            return new AcquireTokenResult(authenticationResult.AccessToken , ExtractObjectId(authenticationResult.IdToken));
         }
 
         private static async Task<IAccount?> GetAccountAsync(IPublicClientApplication app)
@@ -71,7 +73,7 @@ namespace BuildPkiSample.Setup
 
         private static Task OpenBrowserAsync(string url)
         {
-            var processStartInfo = new ProcessStartInfo {FileName = url, UseShellExecute = true};
+            var processStartInfo = new ProcessStartInfo { FileName = url, UseShellExecute = true };
             Process.Start(processStartInfo);
             return Task.CompletedTask;
         }

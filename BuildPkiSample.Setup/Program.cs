@@ -1,15 +1,22 @@
-﻿using System.Threading.Tasks;
+﻿using System;
+using System.Threading.Tasks;
 using Microsoft.Extensions.Configuration;
 
 namespace BuildPkiSample.Setup
 {
     internal class Program
     {
+        protected Program() { }
         public static async Task Main()
         {
             var configuration = ReadConfiguration();
-            AcquireTokenResult acquireTokenResult = await new AuthenticationHelper(configuration.ClientId, configuration.TenantId, AuthenticationHelper.AzureManagementScopes).AcquireTokenAsync();
-            await new ResourceManagementHelper(configuration, acquireTokenResult).CreateAzureResourcesAsync(true);
+            var authHelper = new AuthenticationHelper(configuration.Instance, configuration.TenantId,
+                 configuration.ClientId, AuthenticationHelper.AzureManagementScopes);
+            var acquireTokenResult = await authHelper.AcquireTokenAsync();
+            Console.WriteLine($"Access Token: {acquireTokenResult.AccessToken}");
+            Console.WriteLine($"Object ID: {acquireTokenResult.UserObjectId}");
+            if (!configuration.CreateResources) return;
+            await new ResourceManagementHelper(configuration, acquireTokenResult).CreateAzureResourcesAsync(false);
         }
 
         private static Configuration ReadConfiguration()
